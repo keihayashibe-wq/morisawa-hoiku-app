@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/server-auth";
-import { prisma } from "@/lib/db";
+import { getParentChildren, getChildrenSimple, getContactBookEntries } from "@/lib/cached-queries";
 import ContactBookClient from "./ContactBookClient";
 
 function getTodayString() {
@@ -10,24 +10,9 @@ function getTodayString() {
 export default async function ContactBookPage() {
   const user = await requireAuth();
   const today = getTodayString();
-
   const children = user.role === "PARENT"
-    ? await prisma.child.findMany({ where: { parents: { some: { parentId: user.userId } } }, orderBy: { name: "asc" } })
-    : await prisma.child.findMany({ orderBy: { name: "asc" } });
-
-  let entries: unknown[] = [];
-  if (children.length > 0) {
-    entries = await prisma.contactBook.findMany({
-      where: { childId: children[0].id, date: today },
-      include: { child: true, author: { select: { id: true, name: true, role: true } } },
-      orderBy: { createdAt: "desc" },
-    });
-  }
-
-  return <ContactBookClient
-    user={user}
-    initialChildren={children.map(c => ({ id: c.id, name: c.name }))}
-    initialEntries={JSON.parse(JSON.stringify(entries))}
-    initialDate={today}
-  />;
+    ? await getParentChildren(user.userId)
+    : await getChildrenSimple();
+  const entries = children.length > 0 ? await getContactBookEntries(children[0].id, today) : [];
+  return <ContactBookClient user={user} initialChildren={children.map(c => ({ id: c.id, name: c.name }))} initialEntries={JSON.parse(JSON.stringify(entries))} initialDate={today} />;
 }
