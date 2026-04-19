@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ユーザー・認証
+// ============================================
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   // ADMIN, TEACHER, PARENT
+  avatarUrl String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  children         ChildParent[]
+  contactBooks     ContactBook[]
+  timelinePosts    TimelinePost[]
+  timelineComments TimelineComment[]
+  timelineLikes    TimelineLike[]
+  absenceReports   AbsenceReport[]
+  announcements    Announcement[]
+  readReceipts     ReadReceipt[]
+  healthRecords    HealthRecord[]
+  napChecks        NapCheck[]
+  shifts           Shift[]
+  emergencyBroadcasts EmergencyBroadcast[]
+  photoAlbums      PhotoAlbum[]
+}
+
+// ============================================
+// クラス
+// ============================================
+model Class {
+  id        String   @id @default(uuid())
+  name      String
+  ageGroup  String   // 0歳児, 1歳児, etc.
+  year      Int
+  createdAt DateTime @default(now())
+
+  children  Child[]
+  teachers  ClassTeacher[]
+}
+
+model ClassTeacher {
+  id        String @id @default(uuid())
+  classId   String
+  teacherId String
+  role      String @default("SUB") // MAIN, SUB
+
+  class     Class  @relation(fields: [classId], references: [id])
+
+  @@unique([classId, teacherId])
+}
+
+// ============================================
+// 園児
+// ============================================
+model Child {
+  id          String   @id @default(uuid())
+  name        String
+  nameKana    String?
+  birthDate   String
+  gender      String?
+  classId     String?
+  photoUrl    String?
+  bloodType   String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  class       Class?   @relation(fields: [classId], references: [id])
+
+  parents          ChildParent[]
+  allergies        Allergy[]
+  medicalInfo      MedicalInfo[]
+  emergencyContacts EmergencyContact[]
+  pickupPersons    PickupPerson[]
+  attendances      Attendance[]
+  contactBooks     ContactBook[]
+  absenceReports   AbsenceReport[]
+  healthRecords    HealthRecord[]
+  napChecks        NapCheck[]
+}
+
+model ChildParent {
+  id       String @id @default(uuid())
+  childId  String
+  parentId String
+  relation String // 父, 母, 祖父, 祖母, etc.
+
+  child    Child  @relation(fields: [childId], references: [id])
+  parent   User   @relation(fields: [parentId], references: [id])
+
+  @@unique([childId, parentId])
+}
+
+// ============================================
+// アレルギー・持病情報
+// ============================================
+model Allergy {
+  id        String @id @default(uuid())
+  childId   String
+  allergen  String
+  severity  String // MILD, MODERATE, SEVERE
+  notes     String?
+
+  child     Child  @relation(fields: [childId], references: [id])
+}
+
+model MedicalInfo {
+  id        String @id @default(uuid())
+  childId   String
+  condition String
+  medication String?
+  hospital  String?
+  doctorName String?
+  doctorPhone String?
+  notes     String?
+
+  child     Child  @relation(fields: [childId], references: [id])
+}
+
+// ============================================
+// 緊急連絡先
+// ============================================
+model EmergencyContact {
+  id        String @id @default(uuid())
+  childId   String
+  name      String
+  relation  String
+  phone     String
+  priority  Int    @default(1)
+
+  child     Child  @relation(fields: [childId], references: [id])
+}
+
+// ============================================
+// お迎え者登録
+// ============================================
+model PickupPerson {
+  id        String @id @default(uuid())
+  childId   String
+  name      String
+  relation  String
+  phone     String?
+  photoUrl  String?
+  notes     String?
+
+  child     Child  @relation(fields: [childId], references: [id])
+}
+
+// ============================================
+// チェックイン/チェックアウト（出欠）
+// ============================================
+model Attendance {
+  id           String   @id @default(uuid())
+  childId      String
+  date         String
+  checkInTime  String?
+  checkOutTime String?
+  checkInBy    String?
+  checkOutBy   String?
+  pickupPerson String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  child        Child    @relation(fields: [childId], references: [id])
+
+  @@unique([childId, date])
+}
+
+// ============================================
+// 連絡帳
+// ============================================
+model ContactBook {
+  id          String   @id @default(uuid())
+  childId     String
+  date        String
+  authorId    String
+  // 家庭から
+  homeMood      String?  // GOOD, NORMAL, BAD
+  homeTemp      Float?
+  homeMeal      String?
+  homeSleep     String?
+  homeBowel     String?
+  homeNotes     String?
+  // 園から
+  schoolMood    String?
+  schoolTemp    Float?
+  schoolMeal    String?
+  schoolSleep   String?
+  schoolBowel   String?
+  schoolActivity String?
+  schoolNotes   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  child       Child    @relation(fields: [childId], references: [id])
+  author      User     @relation(fields: [authorId], references: [id])
+
+  @@unique([childId, date, authorId])
+}
+
+// ============================================
+// タイムライン（SNS風投稿）
+// ============================================
+model TimelinePost {
+  id        String   @id @default(uuid())
+  authorId  String
+  content   String
+  classFilter String? // 特定クラスのみに表示する場合
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author    User     @relation(fields: [authorId], references: [id])
+  images    TimelineImage[]
+  comments  TimelineComment[]
+  likes     TimelineLike[]
+}
+
+model TimelineImage {
+  id        String @id @default(uuid())
+  postId    String
+  imageUrl  String
+  caption   String?
+
+  post      TimelinePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model TimelineComment {
+  id        String   @id @default(uuid())
+  postId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  post      TimelinePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User         @relation(fields: [authorId], references: [id])
+}
+
+model TimelineLike {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      TimelinePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+}
+
+// ============================================
+// 欠席・遅刻連絡
+// ============================================
+model AbsenceReport {
+  id        String   @id @default(uuid())
+  childId   String
+  parentId  String
+  date      String
+  type      String   // ABSENT, LATE, EARLY_PICKUP
+  reason    String?
+  arrivalTime String? // 遅刻の場合
+  pickupTime  String? // 早退の場合
+  confirmed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  child     Child    @relation(fields: [childId], references: [id])
+  parent    User     @relation(fields: [parentId], references: [id])
+}
+
+// ============================================
+// お知らせ
+// ============================================
+model Announcement {
+  id          String   @id @default(uuid())
+  authorId    String
+  title       String
+  content     String
+  category    String   @default("GENERAL") // GENERAL, IMPORTANT, EVENT
+  targetRole  String   @default("ALL") // ALL, PARENT, TEACHER
+  attachmentUrl String?
+  pinned      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User     @relation(fields: [authorId], references: [id])
+  readReceipts ReadReceipt[]
+}
+
+model ReadReceipt {
+  id             String   @id @default(uuid())
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([announcementId, userId])
+}
+
+// ============================================
+// 行事カレンダー
+// ============================================
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  date        String
+  startTime   String?
+  endTime     String?
+  location    String?
+  category    String   @default("EVENT") // EVENT, HOLIDAY, HEALTH_CHECK
+  allDay      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+// ============================================
+// 写真アルバム
+// ============================================
+model PhotoAlbum {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  date        String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  photos      Photo[]
+}
+
+model Photo {
+  id        String @id @default(uuid())
+  albumId   String
+  imageUrl  String
+  caption   String?
+
+  album     PhotoAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// 健康記録
+// ============================================
+model HealthRecord {
+  id          String   @id @default(uuid())
+  childId     String
+  date        String
+  recordedById String
+  temperature Float?
+  weight      Float?
+  height      Float?
+  symptoms    String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  child       Child    @relation(fields: [childId], references: [id])
+  recordedBy  User     @relation(fields: [recordedById], references: [id])
+}
+
+// ============================================
+// 午睡チェック
+// ============================================
+model NapCheck {
+  id          String   @id @default(uuid())
+  childId     String
+  date        String
+  time        String
+  checkedById String
+  position    String   // FACE_UP, FACE_DOWN, LEFT, RIGHT
+  breathing   String   // NORMAL, IRREGULAR
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  child       Child    @relation(fields: [childId], references: [id])
+  checkedBy   User     @relation(fields: [checkedById], references: [id])
+}
+
+// ============================================
+// シフト管理
+// ============================================
+model Shift {
+  id          String   @id @default(uuid())
+  teacherId   String
+  date        String
+  startTime   String
+  endTime     String
+  shiftType   String   @default("NORMAL") // EARLY, NORMAL, LATE
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  teacher     User     @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, date])
+}
+
+// ============================================
+// 災害時一斉連絡
+// ============================================
+model EmergencyBroadcast {
+  id          String   @id @default(uuid())
+  authorId    String
+  title       String
+  content     String
+  severity    String   @default("WARNING") // INFO, WARNING, CRITICAL
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  author      User     @relation(fields: [authorId], references: [id])
+}
